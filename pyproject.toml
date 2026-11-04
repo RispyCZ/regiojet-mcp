@@ -1,0 +1,33 @@
+[project]
+name = "regiojet-mcp"
+version = "0.1.2"
+description = "MCP server for the RegioJet Affiliate API"
+readme = "README.md"
+authors = [
+    { name = "Petr Václavek", email = "petr@vaclavek.cloud" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastmcp",
+    "httpx",
+    "python-dotenv",
+]
+
+[project.scripts]
+regiojet-mcp = "regiojet_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.12.18,<=0.13.5"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "respx",
+    "ruff"
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
