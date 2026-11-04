@@ -32,10 +32,19 @@ class RegioJetClient:
                 **settings.extra_headers,
             },
         )
+        # Public files (vehicle layout SVGs) are fetched without account credentials.
+        self._public = httpx.AsyncClient(timeout=settings.timeout, transport=transport)
         self._cache: dict[tuple, tuple[float, Any]] = {}
 
     async def aclose(self) -> None:
         await self._http.aclose()
+        await self._public.aclose()
+
+    async def get_public_text(self, url: str) -> str:
+        """GET a public absolute URL (no auth headers); raises httpx.HTTPError on failure."""
+        resp = await self._public.get(url)
+        resp.raise_for_status()
+        return resp.text
 
     def _headers(self, lang: str | None, currency: str | None) -> dict[str, str]:
         return {

@@ -1,8 +1,10 @@
+import asyncio
 import time
 import unicodedata
 from datetime import date
 from typing import Annotated, Any, Literal
 
+import httpx
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.lifespan import lifespan
@@ -10,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .client import RegioJetClient
 from .config import Settings
+from .seat_layout import single_seats
 
 Lang = Literal["cs", "de", "en", "es", "fr", "hu", "ru", "sk", "uk", "zh"]
 Currency = Literal["CZK", "EUR"]
@@ -392,6 +395,8 @@ async def get_free_seats(
     """Get free seats per vehicle (carriage/bus) offering the given seat class, for each section of a route.
 
     Double-decker buses are one vehicle with several decks; seats are listed per deck.
+    With seat numbers, each deck also lists `single_seats`: its free seats with no
+    neighbouring seat (read from the deck layout); null when the layout couldn't be read.
     """
     # API v1.1 (selected via Content-Type) returns vehicles[].decks[]; the legacy
     # /routes/{id}/freeSeats endpoint only returns the first deck of double-deckers.
@@ -418,6 +423,7 @@ async def get_free_seats(
         lang=lang,
     )
     out = []
+    deck_free: list[tuple[dict[str, Any], list[int]]] = []
     for sec in resp.json():
         vehicles = []
         for v in sec.get("vehicles") or []:
@@ -456,8 +462,32 @@ async def get_free_seats(
             if include_seat_numbers:
                 vehicle["free_seats"] = [i for _, f in decks for i in f]
             vehicles.append(vehicle)
+            deck_free.extend(decks)
         out.append({"section_id": sec.get("sectionId"), "vehicles": vehicles})
+    if include_seat_numbers:
+        await _add_single_seats(deck_free)
     return out
+
+
+async def _layout_singles(url: str | None) -> set[int] | None:
+    """Single seats of a deck layout, or None when it can't be fetched or parsed.
+    Read fresh on every call: RegioJet occasionally renumbers seats."""
+    if not url or not url.startswith(("https://", "http://")):
+        return None
+    try:
+        return single_seats(await get_client().get_public_text(url))
+    except httpx.HTTPError, httpx.InvalidURL, ValueError:
+        return None
+
+
+async def _add_single_seats(deck_free: list[tuple[dict[str, Any], list[int]]]) -> None:
+    urls = list({d["layout_url"] for d, _ in deck_free if d["layout_url"]})
+    singles = dict(zip(urls, await asyncio.gather(*map(_layout_singles, urls))))
+    for deck, free in deck_free:
+        layout = singles.get(deck["layout_url"])
+        deck["single_seats"] = (
+            None if layout is None else [i for i in free if i in layout]
+        )
 
 
 # ---------- constants ----------

@@ -64,7 +64,7 @@ These tools are read-only and don't need a token.
 | `find_locations` | Resolve city/station names (any language, diacritics optional) to ids |
 | `search_routes` | Connections between two locations on a date, paginated via `cursor` + `page` |
 | `get_route_detail` | Sections (lines, platforms, transfers) and price per seat class |
-| `get_free_seats` | Free seats per vehicle for a seat class |
+| `get_free_seats` | Free seats per vehicle and deck for a seat class, with `single_seats` (free seats without a neighbour, read from the deck layout) |
 | `list_tariffs`, `list_seat_classes`, `list_vehicle_standards`, `list_carriers`, `list_action_prices` | Reference data (cached) |
 | `get_ticket` | Existing ticket by account code + ticket id |
 
