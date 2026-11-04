@@ -38,6 +38,12 @@ def test_setra_lower_deck_has_no_single_seats():
     assert single_seats(_svg("bus_SETRA_prizemi.svg")) == set()
 
 
+def test_irizar_has_no_single_seats():
+    # Labels use translate(x y) and the viewBox does not start at 0. The layout is
+    # 2+2 throughout (row 29-30 has a door on the right) with a back bench of five.
+    assert single_seats(_svg("bus_irizar-63-fr.svg")) == set()
+
+
 def test_svg_without_numbered_seats_is_rejected():
     with pytest.raises(ValueError):
         single_seats('<svg viewBox="0 0 192 645"><rect/></svg>')

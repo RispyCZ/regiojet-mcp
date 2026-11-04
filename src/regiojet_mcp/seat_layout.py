@@ -2,11 +2,14 @@
 
 import re
 
-# Each seat label looks like: <text id="n21" transform="matrix(1 0 0 1 30.1 38.7)" ...>21</text>
+# Each seat label looks like one of:
+#   <text id="n21" transform="matrix(1 0 0 1 30.1 38.7)" ...>21</text>
+#   <text id="n1" transform="translate(97.674 534.028)">1</text>
 _SEAT_LABEL = re.compile(
-    r'<text\s+id="n(\d+)"\s+transform="matrix\(1 0 0 1 ([\d.]+) ([\d.]+)\)"'
+    r'<text\s+id="n(\d+)"\s+transform="'
+    r'(?:matrix\(1 0 0 1|translate\()\s*([\d.]+)[\s,]+([\d.]+)\)"'
 )
-_VIEWBOX = re.compile(r'viewBox="[\d.-]+ [\d.-]+ ([\d.]+) [\d.]+"')
+_VIEWBOX = re.compile(r'viewBox="([\d.-]+) [\d.-]+ ([\d.]+) [\d.]+"')
 
 # Labels of seats in one row differ by well under this (seat rows are ~40 units apart).
 _ROW_TOLERANCE = 8.0
@@ -23,7 +26,7 @@ def single_seats(svg: str) -> set[int]:
     viewbox = _VIEWBOX.search(svg)
     if not seats or not viewbox:
         raise ValueError("no seat labels found in vehicle layout")
-    aisle = float(viewbox.group(1)) / 2
+    aisle = float(viewbox.group(1)) + float(viewbox.group(2)) / 2
 
     singles: set[int] = set()
     for side in (
