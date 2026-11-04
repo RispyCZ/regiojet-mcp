@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 import httpx
 import pytest
@@ -10,6 +11,7 @@ from regiojet_mcp.client import RegioJetClient
 from regiojet_mcp.config import Settings
 
 BASE = "https://rj.test/restapi"
+FIXTURES = Path(__file__).parent / "fixtures"
 
 LOCATIONS = [
     {
@@ -290,6 +292,82 @@ async def test_free_seats_double_decker_returns_both_decks(mcp_client):
         (1, 1)
     ]
     assert "free_seats" not in vehicle and "free_seats" not in vehicle["decks"][0]
+
+
+LAYOUT_BASE = "https://rj.test/resources/vehicle_layout"
+
+
+def _upper_deck_response(layout_url: str) -> list[dict]:
+    return [
+        {
+            "sectionId": 7,
+            "vehicles": [
+                {
+                    "number": 1,
+                    "type": "BUS",
+                    "seatClasses": [{"name": "NO"}],
+                    "decks": [
+                        _deck(
+                            2,
+                            "Horní patro",
+                            layout_url,
+                            # 21, 31 are single seats in this layout; 23, 24 a pair.
+                            free=[(21, None), (23, None), (24, None), (31, None)],
+                            occupied=[(22, None)],
+                        )
+                    ],
+                }
+            ],
+        }
+    ]
+
+
+async def _free_seats(mcp_client) -> dict:
+    res = await mcp_client.call_tool(
+        "get_free_seats",
+        {
+            "seat_class": "NO",
+            "sections": [{"section_id": 7, "from_station_id": 1, "to_station_id": 2}],
+        },
+    )
+    return res.structured_content["result"][0]["vehicles"][0]["decks"][0]
+
+
+@respx.mock
+async def test_free_seats_marks_free_single_seats_from_layout(mcp_client):
+    url = f"{LAYOUT_BASE}/bus_SETRA_patro.svg"
+    respx.post(f"{BASE}/routes/freeSeats").respond(json=_upper_deck_response(url))
+    layout = respx.get(url).respond(text=(FIXTURES / "bus_SETRA_patro.svg").read_text())
+
+    deck = await _free_seats(mcp_client)
+
+    assert deck["single_seats"] == [21, 31]
+    assert layout.called
+
+
+@respx.mock
+async def test_free_seats_single_seats_unknown_when_layout_unavailable(mcp_client):
+    url = f"{LAYOUT_BASE}/bus_SETRA_patro.svg"
+    respx.post(f"{BASE}/routes/freeSeats").respond(json=_upper_deck_response(url))
+    respx.get(url).respond(404)
+
+    deck = await _free_seats(mcp_client)
+
+    assert deck["free_seats"] == [21, 23, 24, 31]
+    assert deck["single_seats"] is None
+
+
+@respx.mock
+async def test_free_seats_reads_layout_fresh_on_every_call(mcp_client):
+    # RegioJet occasionally renumbers seats, so the layout must not be cached.
+    url = f"{LAYOUT_BASE}/bus_SETRA_patro.svg"
+    respx.post(f"{BASE}/routes/freeSeats").respond(json=_upper_deck_response(url))
+    layout = respx.get(url).respond(text=(FIXTURES / "bus_SETRA_patro.svg").read_text())
+
+    await _free_seats(mcp_client)
+    await _free_seats(mcp_client)
+
+    assert layout.call_count == 2
 
 
 @respx.mock
